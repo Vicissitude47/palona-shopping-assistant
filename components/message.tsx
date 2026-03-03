@@ -342,6 +342,62 @@ const PurePreviewMessage = ({
               );
             }
 
+            if (type === "tool-searchCatalog") {
+              const { toolCallId, state } = part;
+
+              return (
+                <Tool defaultOpen={true} key={toolCallId}>
+                  <ToolHeader state={state} type="tool-searchCatalog" />
+                  <ToolContent>
+                    {state === "input-available" && (
+                      <ToolInput input={part.input} />
+                    )}
+                    {state === "output-available" && (
+                      <ToolOutput
+                        errorText={undefined}
+                        output={
+                          "error" in part.output ? (
+                            <div className="rounded border p-2 text-red-500">
+                              Error: {String(part.output.error)}
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <div className="text-muted-foreground text-xs">
+                                Found {part.output.total} product(s)
+                              </div>
+                              <div className="space-y-2">
+                                {part.output.products.map((product) => (
+                                  <div
+                                    className="rounded-md border bg-card p-3"
+                                    key={product.id}
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="font-medium text-sm">
+                                        {product.name}
+                                      </div>
+                                      <div className="font-medium text-sm">
+                                        ${product.price}
+                                      </div>
+                                    </div>
+                                    <div className="mt-1 text-muted-foreground text-xs">
+                                      {product.category}
+                                    </div>
+                                    <div className="mt-2 text-sm">
+                                      {product.description}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        }
+                      />
+                    )}
+                  </ToolContent>
+                </Tool>
+              );
+            }
+
             return null;
           })}
 

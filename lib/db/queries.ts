@@ -8,13 +8,18 @@ import {
   eq,
   gt,
   gte,
+  ilike,
   inArray,
   lt,
+  lte,
+  or,
+  sql,
   type SQL,
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { ArtifactKind } from "@/components/artifact";
+import type { CatalogProduct } from "@/lib/commerce/catalog";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { ChatbotError } from "../errors";
 import { generateUUID } from "../utils";
@@ -24,6 +29,7 @@ import {
   type DBMessage,
   document,
   message,
+  product,
   type Suggestion,
   stream,
   suggestion,
@@ -40,6 +46,13 @@ import { generateHashedPassword } from "./utils";
 // biome-ignore lint: Forbidden non-null assertion.
 const client = postgres(process.env.POSTGRES_URL!);
 const db = drizzle(client);
+
+const tokenize = (input: string) =>
+  input
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
 
 export async function getUser(email: string): Promise<User[]> {
   try {
@@ -597,6 +610,154 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
     throw new ChatbotError(
       "bad_request:database",
       "Failed to get stream ids by chat id"
+    );
+  }
+}
+
+export async function upsertCatalogProducts({
+  products,
+}: {
+  products: CatalogProduct[];
+}) {
+  try {
+    if (products.length === 0) {
+      return { inserted: 0 };
+    }
+
+    await db
+      .insert(product)
+      .values(
+        products.map((item) => ({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          description: item.description,
+          priceCents: Math.round(item.price * 100),
+          currency: item.currency,
+          imageUrl: item.imageUrl,
+          tags: item.tags,
+          isActive: true,
+          updatedAt: new Date(),
+        }))
+      )
+      .onConflictDoUpdate({
+        target: product.id,
+        set: {
+          name: sql`excluded."name"`,
+          category: sql`excluded."category"`,
+          description: sql`excluded."description"`,
+          priceCents: sql`excluded."priceCents"`,
+          currency: sql`excluded."currency"`,
+          imageUrl: sql`excluded."imageUrl"`,
+          tags: sql`excluded."tags"`,
+          isActive: sql`excluded."isActive"`,
+          updatedAt: sql`now()`,
+        },
+      });
+
+    return { inserted: products.length };
+  } catch (_error) {
+    throw new ChatbotError(
+      "bad_request:database",
+      "Failed to upsert catalog products"
+    );
+  }
+}
+
+export async function searchCatalogProducts({
+  query,
+  maxPrice,
+  minPrice,
+  category,
+  limit = 5,
+}: {
+  query: string;
+  maxPrice?: number;
+  minPrice?: number;
+  category?: string;
+  limit?: number;
+}) {
+  try {
+    const normalizedCategory = category?.trim().toLowerCase();
+    const queryTokens = tokenize(query);
+
+    const whereClauses: SQL<unknown>[] = [eq(product.isActive, true)];
+
+    if (normalizedCategory) {
+      whereClauses.push(ilike(product.category, `%${normalizedCategory}%`));
+    }
+
+    if (minPrice !== undefined) {
+      whereClauses.push(gte(product.priceCents, Math.round(minPrice * 100)));
+    }
+
+    if (maxPrice !== undefined) {
+      whereClauses.push(lte(product.priceCents, Math.round(maxPrice * 100)));
+    }
+
+    if (queryTokens.length > 0) {
+      whereClauses.push(
+        or(
+          ...queryTokens.flatMap((token) => [
+            ilike(product.name, `%${token}%`),
+            ilike(product.description, `%${token}%`),
+            ilike(product.category, `%${token}%`),
+          ])
+        ) as SQL<unknown>
+      );
+    }
+
+    const rows = await db
+      .select()
+      .from(product)
+      .where(and(...whereClauses))
+      .limit(100);
+
+    const scored = rows
+      .map((item) => {
+        const haystack = [
+          item.name,
+          item.category,
+          item.description,
+          ...(item.tags ?? []),
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        let score = 0;
+        for (const token of queryTokens) {
+          if ((item.tags ?? []).some((tag) => tag.toLowerCase() === token)) {
+            score += 4;
+            continue;
+          }
+          if (item.name.toLowerCase().includes(token)) {
+            score += 3;
+            continue;
+          }
+          if (item.category.toLowerCase().includes(token)) {
+            score += 2;
+            continue;
+          }
+          if (haystack.includes(token)) {
+            score += 1;
+          }
+        }
+
+        return {
+          ...item,
+          score,
+          price: item.priceCents / 100,
+        };
+      })
+      .filter((item) => item.score > 0 || queryTokens.length === 0)
+      .sort((a, b) => b.score - a.score || a.priceCents - b.priceCents)
+      .slice(0, limit);
+
+    return scored;
+  } catch (_error) {
+    throw new ChatbotError(
+      "bad_request:database",
+      "Failed to search catalog products"
     );
   }
 }

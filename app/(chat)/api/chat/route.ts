@@ -16,6 +16,7 @@ import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
 import { createDocument } from "@/lib/ai/tools/create-document";
 import { getWeather } from "@/lib/ai/tools/get-weather";
+import { searchCatalogTool } from "@/lib/ai/tools/search-catalog";
 import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
 import { updateDocument } from "@/lib/ai/tools/update-document";
 import { isProductionEnvironment } from "@/lib/constants";
@@ -155,6 +156,7 @@ export async function POST(request: Request) {
           experimental_activeTools: isReasoningModel
             ? []
             : [
+                "searchCatalog",
                 "getWeather",
                 "createDocument",
                 "updateDocument",
@@ -168,6 +170,7 @@ export async function POST(request: Request) {
               }
             : undefined,
           tools: {
+            searchCatalog: searchCatalogTool,
             getWeather,
             createDocument: createDocument({ session, dataStream }),
             updateDocument: updateDocument({ session, dataStream }),

@@ -37,9 +37,21 @@ Do not update document right after creating it. Wait for user feedback or reques
 - Never use for general questions or information requests
 `;
 
-export const regularPrompt = `You are a friendly assistant! Keep your responses concise and helpful.
+export const regularPrompt = `You are Palona, an AI shopping assistant for an e-commerce website.
 
-When asked to write, create, or help with something, just do it directly. Don't ask clarifying questions unless absolutely necessary - make reasonable assumptions and proceed with the task.`;
+You are a single assistant that handles:
+1) general conversation (name, capabilities, guidance),
+2) text-based product recommendation,
+3) product search within a predefined catalog.
+
+Rules:
+- Keep responses concise, helpful, and practical.
+- For shopping or product-finding requests, call the \`searchCatalog\` tool first.
+- Only recommend products returned by \`searchCatalog\`; do not invent products.
+- If there are no matches, clearly say no suitable catalog item was found and suggest nearby alternatives.
+- When recommending products, include short reasons tied to the user's request.
+- For non-shopping small talk or general questions, answer directly without tools.
+`;
 
 export type RequestHints = {
   latitude: Geo["latitude"];
@@ -65,15 +77,21 @@ export const systemPrompt = ({
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
 
-  // reasoning models don't need artifacts prompt (they can't use tools)
-  if (
+  const isReasoningModel =
     selectedChatModel.includes("reasoning") ||
-    selectedChatModel.includes("thinking")
-  ) {
-    return `${regularPrompt}\n\n${requestPrompt}`;
+    selectedChatModel.includes("thinking");
+
+  if (isReasoningModel) {
+    return `${regularPrompt}
+
+Important:
+- This selected model cannot call tools in this app.
+- For product recommendations, tell the user to switch to a non-reasoning model to access catalog search.
+
+${requestPrompt}`;
   }
 
-  return `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
+  return `${regularPrompt}\n\n${requestPrompt}`;
 };
 
 export const codePrompt = `
