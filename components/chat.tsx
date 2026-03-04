@@ -31,6 +31,7 @@ import { MultimodalInput } from "./multimodal-input";
 import { getChatHistoryPaginationKey } from "./sidebar-history";
 import { toast } from "./toast";
 import type { VisibilityType } from "./visibility-selector";
+import { resolveChatModel } from "@/lib/ai/models";
 
 export function Chat({
   id,
@@ -70,7 +71,9 @@ export function Chat({
 
   const [input, setInput] = useState<string>("");
   const [showCreditCardAlert, setShowCreditCardAlert] = useState(false);
-  const [currentModelId, setCurrentModelId] = useState(initialChatModel);
+  const [currentModelId, setCurrentModelId] = useState(() =>
+    resolveChatModel(initialChatModel)
+  );
   const currentModelIdRef = useRef(currentModelId);
 
   useEffect(() => {
@@ -202,7 +205,7 @@ export function Chat({
           isReadonly={isReadonly}
           messages={messages}
           regenerate={regenerate}
-          selectedModelId={initialChatModel}
+          selectedModelId={currentModelId}
           setMessages={setMessages}
           status={status}
           votes={votes}

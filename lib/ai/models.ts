@@ -23,24 +23,12 @@ export const chatModels: ChatModel[] = [
     provider: "openai",
     description: "Fast and cost-effective for simple tasks",
   },
-  {
-    id: "openai/gpt-5.2",
-    name: "GPT-5.2",
-    provider: "openai",
-    description: "Most capable OpenAI model",
-  },
   // Google
   {
     id: "google/gemini-2.5-flash-lite",
     name: "Gemini 2.5 Flash Lite",
     provider: "google",
     description: "Ultra fast and affordable",
-  },
-  {
-    id: "google/gemini-3-pro-preview",
-    name: "Gemini 3 Pro",
-    provider: "google",
-    description: "Most capable Google model",
   },
   // xAI
   {
@@ -49,20 +37,21 @@ export const chatModels: ChatModel[] = [
     provider: "xai",
     description: "Fast with 30K context",
   },
-  // Reasoning models (extended thinking)
-  {
-    id: "anthropic/claude-3.7-sonnet-thinking",
-    name: "Claude 3.7 Sonnet",
-    provider: "reasoning",
-    description: "Extended thinking for complex problems",
-  },
-  {
-    id: "xai/grok-code-fast-1-thinking",
-    name: "Grok Code Fast",
-    provider: "reasoning",
-    description: "Reasoning optimized for code",
-  },
 ];
+
+const chatModelIds = new Set(chatModels.map((model) => model.id));
+
+export function isSupportedChatModel(modelId: string) {
+  return chatModelIds.has(modelId);
+}
+
+export function resolveChatModel(modelId?: string | null) {
+  if (modelId && isSupportedChatModel(modelId)) {
+    return modelId;
+  }
+
+  return DEFAULT_CHAT_MODEL;
+}
 
 // Group models by provider for UI
 export const modelsByProvider = chatModels.reduce(

@@ -13,6 +13,7 @@ import { createResumableStreamContext } from "resumable-stream";
 import { auth, type UserType } from "@/app/(auth)/auth";
 import { imageSearchLog } from "@/lib/ai/image-search-logger";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import { resolveChatModel } from "@/lib/ai/models";
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
 import { createDocument } from "@/lib/ai/tools/create-document";
@@ -193,11 +194,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { id, message, messages, selectedChatModel, selectedVisibilityType } =
+    const {
+      id,
+      message,
+      messages,
+      selectedChatModel: rawSelectedChatModel,
+      selectedVisibilityType,
+    } =
       requestBody;
+    const effectiveChatModel = resolveChatModel(rawSelectedChatModel);
     imageSearchLog("chat:post:start", {
       chatId: id,
-      selectedChatModel,
+      selectedChatModel: effectiveChatModel,
       hasMessage: Boolean(message),
       messageParts: message?.parts?.length ?? 0,
     });
@@ -277,8 +285,8 @@ export async function POST(request: Request) {
     }
 
     const isReasoningModel =
-      selectedChatModel.includes("reasoning") ||
-      selectedChatModel.includes("thinking");
+      effectiveChatModel.includes("reasoning") ||
+      effectiveChatModel.includes("thinking");
 
     const normalizedUiMessages = normalizeMessagesForModel(
       uiMessages,
@@ -300,8 +308,11 @@ export async function POST(request: Request) {
       originalMessages: isToolApprovalFlow ? uiMessages : undefined,
       execute: async ({ writer: dataStream }) => {
         const result = streamText({
-          model: getLanguageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel, requestHints }),
+          model: getLanguageModel(effectiveChatModel),
+          system: systemPrompt({
+            selectedChatModel: effectiveChatModel,
+            requestHints,
+          }),
           messages: modelMessages,
           stopWhen: stepCountIs(5),
           experimental_activeTools: isReasoningModel
