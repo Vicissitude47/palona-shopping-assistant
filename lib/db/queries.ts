@@ -20,6 +20,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { ArtifactKind } from "@/components/artifact";
 import type { CatalogProduct } from "@/lib/commerce/catalog";
+import { IMAGE_EMBEDDING_DIMENSION } from "@/lib/commerce/image-search";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { ChatbotError } from "../errors";
 import { generateUUID } from "../utils";
@@ -52,7 +53,13 @@ const tokenize = (input: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter(Boolean);
+    .map((token) => token.trim())
+    .filter((token) => token.length > 1);
+
+const normalizeCompact = (input: string) =>
+  input.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const toVectorLiteral = (embedding: number[]) => `[${embedding.join(",")}]`;
 
 export async function getUser(email: string): Promise<User[]> {
   try {
@@ -664,6 +671,107 @@ export async function upsertCatalogProducts({
   }
 }
 
+export async function upsertProductImageEmbedding({
+  productId,
+  embedding,
+  model,
+}: {
+  productId: string;
+  embedding: number[];
+  model: string;
+}) {
+  try {
+    if (embedding.length !== IMAGE_EMBEDDING_DIMENSION) {
+      throw new ChatbotError(
+        "bad_request:database",
+        `Expected embedding dimension ${IMAGE_EMBEDDING_DIMENSION}, received ${embedding.length}`
+      );
+    }
+
+    const vectorLiteral = toVectorLiteral(embedding);
+
+    await client`
+      INSERT INTO product_image_embeddings (product_id, embedding, model, updated_at)
+      VALUES (${productId}, ${vectorLiteral}::vector, ${model}, now())
+      ON CONFLICT (product_id)
+      DO UPDATE SET
+        embedding = EXCLUDED.embedding,
+        model = EXCLUDED.model,
+        updated_at = now()
+    `;
+
+    return { productId };
+  } catch (_error) {
+    throw new ChatbotError(
+      "bad_request:database",
+      "Failed to upsert product image embedding"
+    );
+  }
+}
+
+export async function searchCatalogProductsByImageEmbedding({
+  embedding,
+  limit = 5,
+}: {
+  embedding: number[];
+  limit?: number;
+}) {
+  try {
+    if (embedding.length !== IMAGE_EMBEDDING_DIMENSION) {
+      throw new ChatbotError(
+        "bad_request:database",
+        `Expected embedding dimension ${IMAGE_EMBEDDING_DIMENSION}, received ${embedding.length}`
+      );
+    }
+
+    const vectorLiteral = toVectorLiteral(embedding);
+
+    const rows = await client<
+      {
+        id: string;
+        name: string;
+        category: string;
+        description: string;
+        priceCents: number;
+        currency: string;
+        imageUrl: string;
+        similarity: number;
+      }[]
+    >`
+      SELECT
+        p.id,
+        p."name",
+        p."category",
+        p."description",
+        p."priceCents",
+        p."currency",
+        p."imageUrl",
+        (1 - (e.embedding <=> ${vectorLiteral}::vector))::float AS similarity
+      FROM product_image_embeddings e
+      INNER JOIN "Product" p ON p.id = e.product_id
+      WHERE p."isActive" = true
+      ORDER BY e.embedding <=> ${vectorLiteral}::vector
+      LIMIT ${Math.max(1, Math.min(limit, 10))}
+    `;
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      category: row.category,
+      description: row.description,
+      price: row.priceCents / 100,
+      currency: row.currency,
+      imageUrl: row.imageUrl,
+      similarity: Number(row.similarity),
+    }));
+  } catch (_error) {
+    throw new ChatbotError(
+      "bad_request:database",
+      "Failed to search catalog products by image embedding"
+    );
+  }
+}
+
 export async function searchCatalogProducts({
   query,
   maxPrice,
@@ -679,12 +787,30 @@ export async function searchCatalogProducts({
 }) {
   try {
     const normalizedCategory = category?.trim().toLowerCase();
-    const queryTokens = tokenize(query);
+    const compactCategory = normalizedCategory
+      ? normalizeCompact(normalizedCategory)
+      : undefined;
+    const queryTokens = Array.from(new Set(tokenize(query)));
+    const compactQueryTokens = queryTokens
+      .map((token) => normalizeCompact(token))
+      .filter((token) => token.length > 0);
 
     const whereClauses: SQL<unknown>[] = [eq(product.isActive, true)];
 
     if (normalizedCategory) {
-      whereClauses.push(ilike(product.category, `%${normalizedCategory}%`));
+      const categoryClauses: SQL<unknown>[] = [
+        ilike(product.category, `%${normalizedCategory}%`),
+      ];
+
+      if (compactCategory) {
+        categoryClauses.push(
+          sql`regexp_replace(lower(${product.category}), '[^a-z0-9]', '', 'g') LIKE ${`%${compactCategory}%`}`
+        );
+      }
+
+      whereClauses.push(
+        or(...categoryClauses) as SQL<unknown>
+      );
     }
 
     if (minPrice !== undefined) {
@@ -698,11 +824,24 @@ export async function searchCatalogProducts({
     if (queryTokens.length > 0) {
       whereClauses.push(
         or(
-          ...queryTokens.flatMap((token) => [
-            ilike(product.name, `%${token}%`),
-            ilike(product.description, `%${token}%`),
-            ilike(product.category, `%${token}%`),
-          ])
+          ...queryTokens.flatMap((token, index) => {
+            const compactToken = compactQueryTokens[index];
+
+            return [
+              ilike(product.name, `%${token}%`),
+              ilike(product.description, `%${token}%`),
+              ilike(product.category, `%${token}%`),
+              compactToken
+                ? sql`regexp_replace(lower(${product.name}), '[^a-z0-9]', '', 'g') LIKE ${`%${compactToken}%`}`
+                : undefined,
+              compactToken
+                ? sql`regexp_replace(lower(${product.description}), '[^a-z0-9]', '', 'g') LIKE ${`%${compactToken}%`}`
+                : undefined,
+              compactToken
+                ? sql`regexp_replace(lower(${product.category}), '[^a-z0-9]', '', 'g') LIKE ${`%${compactToken}%`}`
+                : undefined,
+            ].filter((clause): clause is SQL<unknown> => Boolean(clause));
+          })
         ) as SQL<unknown>
       );
     }
@@ -715,6 +854,12 @@ export async function searchCatalogProducts({
 
     const scored = rows
       .map((item) => {
+        const normalizedTags = (item.tags ?? []).map((tag) =>
+          tag.toLowerCase()
+        );
+        const compactTags = normalizedTags.map((tag) => normalizeCompact(tag));
+        const lowerName = item.name.toLowerCase();
+        const lowerCategory = item.category.toLowerCase();
         const haystack = [
           item.name,
           item.category,
@@ -723,22 +868,40 @@ export async function searchCatalogProducts({
         ]
           .join(" ")
           .toLowerCase();
+        const compactHaystack = normalizeCompact(haystack);
+        const compactName = normalizeCompact(item.name);
+        const compactProductCategory = normalizeCompact(item.category);
 
         let score = 0;
         for (const token of queryTokens) {
-          if ((item.tags ?? []).some((tag) => tag.toLowerCase() === token)) {
+          const compactToken = normalizeCompact(token);
+
+          if (
+            normalizedTags.some((tag) => tag === token) ||
+            compactTags.some((tag) => tag === compactToken)
+          ) {
             score += 4;
             continue;
           }
-          if (item.name.toLowerCase().includes(token)) {
+          if (
+            lowerName.includes(token) ||
+            (compactToken.length > 0 && compactName.includes(compactToken))
+          ) {
             score += 3;
             continue;
           }
-          if (item.category.toLowerCase().includes(token)) {
+          if (
+            lowerCategory.includes(token) ||
+            (compactToken.length > 0 &&
+              compactProductCategory.includes(compactToken))
+          ) {
             score += 2;
             continue;
           }
-          if (haystack.includes(token)) {
+          if (
+            haystack.includes(token) ||
+            (compactToken.length > 0 && compactHaystack.includes(compactToken))
+          ) {
             score += 1;
           }
         }

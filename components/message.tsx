@@ -23,6 +23,18 @@ import { MessageReasoning } from "./message-reasoning";
 import { PreviewAttachment } from "./preview-attachment";
 import { Weather } from "./weather";
 
+function formatPrice(price: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(price);
+  } catch {
+    return `$${price}`;
+  }
+}
+
 const PurePreviewMessage = ({
   addToolApprovalResponse,
   chatId,
@@ -365,29 +377,162 @@ const PurePreviewMessage = ({
                               <div className="text-muted-foreground text-xs">
                                 Found {part.output.total} product(s)
                               </div>
-                              <div className="space-y-2">
-                                {part.output.products.map((product) => (
-                                  <div
-                                    className="rounded-md border bg-card p-3"
-                                    key={product.id}
-                                  >
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="font-medium text-sm">
-                                        {product.name}
+                              {part.output.total === 0 ? (
+                                <div className="rounded-md border border-dashed bg-muted/20 p-3 text-muted-foreground text-sm">
+                                  {part.output.fallbackMessage ??
+                                    "No matching products were found in catalog."}
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {part.output.products.map((product) => (
+                                    <div
+                                      className="rounded-md border bg-card p-3"
+                                      key={product.id}
+                                    >
+                                      <div className="mb-2 overflow-hidden rounded-md border bg-muted/30">
+                                        {/* biome-ignore lint/performance/noImgElement: external catalog image URLs */}
+                                        <img
+                                          alt={product.name}
+                                          className="h-36 w-full object-cover"
+                                          src={product.imageUrl}
+                                        />
                                       </div>
-                                      <div className="font-medium text-sm">
-                                        ${product.price}
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="font-medium text-sm">
+                                          {product.name}
+                                        </div>
+                                        <div className="font-semibold text-sm">
+                                          {formatPrice(
+                                            product.price,
+                                            product.currency
+                                          )}
+                                        </div>
                                       </div>
+                                      <div className="mt-1 text-muted-foreground text-xs">
+                                        {product.category}
+                                      </div>
+                                      {product.reason && (
+                                        <div className="mt-2 rounded-md bg-muted/50 px-2 py-1 text-xs">
+                                          {product.reason}
+                                        </div>
+                                      )}
+                                      <div className="mt-2 text-sm">
+                                        {product.description}
+                                      </div>
+                                      <a
+                                        className="mt-3 inline-flex rounded-md bg-primary px-2.5 py-1.5 font-medium text-primary-foreground text-xs transition-colors hover:bg-primary/90"
+                                        href={product.ctaUrl ?? product.imageUrl}
+                                        rel="noreferrer"
+                                        target="_blank"
+                                      >
+                                        {product.ctaLabel ?? "View Product"}
+                                      </a>
                                     </div>
-                                    <div className="mt-1 text-muted-foreground text-xs">
-                                      {product.category}
-                                    </div>
-                                    <div className="mt-2 text-sm">
-                                      {product.description}
-                                    </div>
-                                  </div>
-                                ))}
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        }
+                      />
+                    )}
+                  </ToolContent>
+                </Tool>
+              );
+            }
+
+            if (type === "tool-searchCatalogByImage") {
+              const { toolCallId, state } = part;
+
+              return (
+                <Tool defaultOpen={true} key={toolCallId}>
+                  <ToolHeader state={state} type="tool-searchCatalogByImage" />
+                  <ToolContent>
+                    {state === "input-available" && (
+                      <ToolInput input={part.input} />
+                    )}
+                    {state === "output-available" && (
+                      <ToolOutput
+                        errorText={undefined}
+                        output={
+                          "error" in part.output ? (
+                            <div className="rounded border p-2 text-red-500">
+                              Error: {String(part.output.error)}
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <div className="text-muted-foreground text-xs">
+                                Found {part.output.total} similar product(s)
                               </div>
+                              {part.output.total === 0 ? (
+                                <div className="rounded-md border border-dashed bg-muted/20 p-3 text-muted-foreground text-sm">
+                                  {part.output.fallbackMessage ??
+                                    "No visually similar products were found in catalog."}
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {part.output.products.map((product) => (
+                                    <div
+                                      className="rounded-md border bg-card p-3"
+                                      key={product.id}
+                                    >
+                                      <div className="mb-2 overflow-hidden rounded-md border bg-muted/30">
+                                        {/* biome-ignore lint/performance/noImgElement: external catalog image URLs */}
+                                        <img
+                                          alt={product.name}
+                                          className="h-36 w-full object-cover"
+                                          src={product.imageUrl}
+                                        />
+                                      </div>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="font-medium text-sm">
+                                          {product.name}
+                                        </div>
+                                        <div className="font-semibold text-sm">
+                                          {formatPrice(
+                                            product.price,
+                                            product.currency
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="mt-1 text-muted-foreground text-xs">
+                                        {product.category} | similarity{" "}
+                                        {Math.max(
+                                          0,
+                                          Math.min(1, product.similarity)
+                                        ).toFixed(3)}
+                                      </div>
+                                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                        <div
+                                          className="h-full bg-primary"
+                                          style={{
+                                            width: `${Math.max(
+                                              0,
+                                              Math.min(1, product.similarity)
+                                            ) * 100}%`,
+                                          }}
+                                        />
+                                      </div>
+                                      {product.reason && (
+                                        <div className="mt-2 rounded-md bg-muted/50 px-2 py-1 text-xs">
+                                          {product.reason}
+                                        </div>
+                                      )}
+                                      <div className="mt-2 text-sm">
+                                        {product.description}
+                                      </div>
+                                      <a
+                                        className="mt-3 inline-flex rounded-md bg-primary px-2.5 py-1.5 font-medium text-primary-foreground text-xs transition-colors hover:bg-primary/90"
+                                        href={product.ctaUrl ?? product.imageUrl}
+                                        rel="noreferrer"
+                                        target="_blank"
+                                      >
+                                        {product.ctaLabel ?? "View Product"}
+                                      </a>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )
                         }

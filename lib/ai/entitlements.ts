@@ -4,19 +4,31 @@ type Entitlements = {
   maxMessagesPerDay: number;
 };
 
+const DEFAULT_MAX_MESSAGES_PER_DAY = 200;
+
+function getMaxMessagesPerDay() {
+  const parsed = Number(process.env.MAX_MESSAGES_PER_DAY);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.floor(parsed);
+  }
+  return DEFAULT_MAX_MESSAGES_PER_DAY;
+}
+
+const maxMessagesPerDay = getMaxMessagesPerDay();
+
 export const entitlementsByUserType: Record<UserType, Entitlements> = {
   /*
    * For users without an account
    */
   guest: {
-    maxMessagesPerDay: 10,
+    maxMessagesPerDay,
   },
 
   /*
    * For users with an account
    */
   regular: {
-    maxMessagesPerDay: 10,
+    maxMessagesPerDay,
   },
 
   /*

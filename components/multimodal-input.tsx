@@ -147,20 +147,29 @@ function PureMultimodalInput({
   const submitForm = useCallback(() => {
     window.history.pushState({}, "", `/chat/${chatId}`);
 
+    const trimmedInput = input.trim();
+    const nextParts: Array<
+      | { type: "file"; url: string; name: string; mediaType: string }
+      | { type: "text"; text: string }
+    > = [
+      ...attachments.map((attachment) => ({
+        type: "file" as const,
+        url: attachment.url,
+        name: attachment.name,
+        mediaType: attachment.contentType,
+      })),
+    ];
+
+    if (trimmedInput.length > 0) {
+      nextParts.push({
+        type: "text",
+        text: trimmedInput,
+      });
+    }
+
     sendMessage({
       role: "user",
-      parts: [
-        ...attachments.map((attachment) => ({
-          type: "file" as const,
-          url: attachment.url,
-          name: attachment.name,
-          mediaType: attachment.contentType,
-        })),
-        {
-          type: "text",
-          text: input,
-        },
-      ],
+      parts: nextParts,
     });
 
     setAttachments([]);
@@ -396,7 +405,10 @@ function PureMultimodalInput({
             <PromptInputSubmit
               className="size-8 rounded-full bg-primary text-primary-foreground transition-colors duration-200 hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
               data-testid="send-button"
-              disabled={!input.trim() || uploadQueue.length > 0}
+              disabled={
+                (!input.trim() && attachments.length === 0) ||
+                uploadQueue.length > 0
+              }
               status={status}
             >
               <ArrowUpIcon size={14} />

@@ -17,6 +17,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow AI provider to fetch proxied image bytes without session cookies.
+  if (pathname.startsWith("/api/files/blob")) {
+    return NextResponse.next();
+  }
+
   const token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET,

@@ -114,3 +114,16 @@ export function getTextFromMessage(message: ChatMessage | UIMessage): string {
     .map((part) => (part as { type: 'text'; text: string}).text)
     .join('');
 }
+
+export function getAttachmentPreviewUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.endsWith(".private.blob.vercel-storage.com")) {
+      return `/api/files/blob?url=${encodeURIComponent(url)}`;
+    }
+  } catch {
+    return url;
+  }
+
+  return url;
+}

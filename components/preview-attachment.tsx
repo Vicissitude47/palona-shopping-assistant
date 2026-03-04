@@ -1,5 +1,5 @@
-import Image from "next/image";
 import type { Attachment } from "@/lib/types";
+import { getAttachmentPreviewUrl } from "@/lib/utils";
 import { Loader } from "./elements/loader";
 import { CrossSmallIcon } from "./icons";
 import { Button } from "./ui/button";
@@ -14,6 +14,7 @@ export const PreviewAttachment = ({
   onRemove?: () => void;
 }) => {
   const { name, url, contentType } = attachment;
+  const previewUrl = getAttachmentPreviewUrl(url);
 
   return (
     <div
@@ -21,12 +22,11 @@ export const PreviewAttachment = ({
       data-testid="input-attachment-preview"
     >
       {contentType?.startsWith("image") ? (
-        <Image
+        // biome-ignore lint/performance/noImgElement: attachment previews can be proxied local URLs with query params
+        <img
           alt={name ?? "An image attachment"}
           className="size-full object-cover"
-          height={64}
-          src={url}
-          width={64}
+          src={previewUrl}
         />
       ) : (
         <div className="flex size-full items-center justify-center text-muted-foreground text-xs">

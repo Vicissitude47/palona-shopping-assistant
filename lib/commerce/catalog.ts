@@ -14,7 +14,11 @@ const tokenize = (input: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter(Boolean);
+    .map((token) => token.trim())
+    .filter((token) => token.length > 1);
+
+const normalizeCompact = (input: string) =>
+  input.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export const catalogProducts: CatalogProduct[] = [
   {
@@ -158,8 +162,14 @@ export const searchCatalog = ({
   category?: string;
   limit?: number;
 }): CatalogSearchResult[] => {
-  const queryTokens = tokenize(query);
+  const queryTokens = Array.from(new Set(tokenize(query)));
+  const compactQueryTokens = queryTokens
+    .map((token) => normalizeCompact(token))
+    .filter((token) => token.length > 0);
   const normalizedCategory = category?.trim().toLowerCase();
+  const compactCategory = normalizedCategory
+    ? normalizeCompact(normalizedCategory)
+    : undefined;
 
   const filtered = catalogProducts.filter((product) => {
     if (maxPrice !== undefined && product.price > maxPrice) {
@@ -170,7 +180,8 @@ export const searchCatalog = ({
     }
     if (
       normalizedCategory &&
-      !product.category.toLowerCase().includes(normalizedCategory)
+      !product.category.toLowerCase().includes(normalizedCategory) &&
+      !(compactCategory && normalizeCompact(product.category).includes(compactCategory))
     ) {
       return false;
     }
@@ -187,29 +198,49 @@ export const searchCatalog = ({
       ]
         .join(" ")
         .toLowerCase();
+      const compactHaystack = normalizeCompact(haystack);
+      const compactName = normalizeCompact(product.name);
+      const compactProductCategory = normalizeCompact(product.category);
+      const normalizedTags = product.tags.map((tag) => tag.toLowerCase());
+      const compactTags = normalizedTags.map((tag) => normalizeCompact(tag));
 
       let score = 0;
       for (const token of queryTokens) {
-        if (product.tags.some((tag) => tag.toLowerCase() === token)) {
+        const compactToken = normalizeCompact(token);
+
+        if (
+          normalizedTags.some((tag) => tag === token) ||
+          compactTags.some((tag) => tag === compactToken)
+        ) {
           score += 4;
           continue;
         }
-        if (product.name.toLowerCase().includes(token)) {
+        if (
+          product.name.toLowerCase().includes(token) ||
+          (compactToken.length > 0 && compactName.includes(compactToken))
+        ) {
           score += 3;
           continue;
         }
-        if (product.category.toLowerCase().includes(token)) {
+        if (
+          product.category.toLowerCase().includes(token) ||
+          (compactToken.length > 0 &&
+            compactProductCategory.includes(compactToken))
+        ) {
           score += 2;
           continue;
         }
-        if (haystack.includes(token)) {
+        if (
+          haystack.includes(token) ||
+          (compactToken.length > 0 && compactHaystack.includes(compactToken))
+        ) {
           score += 1;
         }
       }
 
       return { ...product, score };
     })
-    .filter((product) => product.score > 0 || queryTokens.length === 0)
+    .filter((product) => product.score > 0 || compactQueryTokens.length === 0)
     .sort((a, b) => b.score - a.score || a.price - b.price);
 
   return scored.slice(0, limit);

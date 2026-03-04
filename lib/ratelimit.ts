@@ -3,8 +3,16 @@ import { createClient } from "redis";
 import { isProductionEnvironment } from "@/lib/constants";
 import { ChatbotError } from "@/lib/errors";
 
-const MAX_MESSAGES_PER_DAY = 10;
+const DEFAULT_IP_MAX_MESSAGES_PER_DAY = 200;
 const TTL_SECONDS = 60 * 60 * 24;
+
+function getIpMaxMessagesPerDay() {
+  const parsed = Number(process.env.IP_MAX_MESSAGES_PER_DAY);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.floor(parsed);
+  }
+  return DEFAULT_IP_MAX_MESSAGES_PER_DAY;
+}
 
 let client: ReturnType<typeof createClient> | null = null;
 
@@ -33,7 +41,10 @@ export async function checkIpRateLimit(ip: string | undefined) {
       .expire(key, TTL_SECONDS, "NX")
       .exec();
 
-    if (typeof count === "number" && count > MAX_MESSAGES_PER_DAY) {
+    if (
+      typeof count === "number" &&
+      count > getIpMaxMessagesPerDay()
+    ) {
       throw new ChatbotError("rate_limit:chat");
     }
   } catch (error) {

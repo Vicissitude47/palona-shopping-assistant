@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/app/(auth)/auth";
+import { imageSearchLog } from "@/lib/ai/image-search-logger";
 
 // Use Blob instead of File since File is not available in Node.js environment
 const FileSchema = z.object({
@@ -52,16 +53,35 @@ export async function POST(request: Request) {
 
     try {
       const data = await put(`${filename}`, fileBuffer, {
-        access: "public",
+        access: "private",
+        addRandomSuffix: true,
       });
+      imageSearchLog("upload:done", {
+        pathname: data.pathname,
+        contentType: data.contentType,
+      });
+      const downloadUrl =
+        "downloadUrl" in data && typeof data.downloadUrl === "string"
+          ? data.downloadUrl
+          : undefined;
 
-      return NextResponse.json(data);
-    } catch (_error) {
-      return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+      return NextResponse.json({
+        ...data,
+        url: data.url,
+        downloadUrl: downloadUrl ?? data.downloadUrl,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Upload failed";
+      console.error("Blob upload failed:", error);
+      return NextResponse.json({ error: message }, { status: 500 });
     }
-  } catch (_error) {
+  } catch (error) {
+    console.error("Upload request processing failed:", error);
     return NextResponse.json(
-      { error: "Failed to process request" },
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to process request",
+      },
       { status: 500 }
     );
   }

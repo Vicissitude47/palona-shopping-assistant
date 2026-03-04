@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ArtifactKind } from "@/components/artifact";
 import type { createDocument } from "./ai/tools/create-document";
 import type { getWeather } from "./ai/tools/get-weather";
+import type { searchCatalogByImageTool } from "./ai/tools/search-catalog-by-image";
 import type { searchCatalogTool } from "./ai/tools/search-catalog";
 import type { requestSuggestions } from "./ai/tools/request-suggestions";
 import type { updateDocument } from "./ai/tools/update-document";
@@ -18,6 +19,7 @@ export type MessageMetadata = z.infer<typeof messageMetadataSchema>;
 
 type weatherTool = InferUITool<typeof getWeather>;
 type searchCatalog = InferUITool<typeof searchCatalogTool>;
+type searchCatalogByImage = InferUITool<typeof searchCatalogByImageTool>;
 type createDocumentTool = InferUITool<ReturnType<typeof createDocument>>;
 type updateDocumentTool = InferUITool<ReturnType<typeof updateDocument>>;
 type requestSuggestionsTool = InferUITool<
@@ -27,6 +29,7 @@ type requestSuggestionsTool = InferUITool<
 export type ChatTools = {
   getWeather: weatherTool;
   searchCatalog: searchCatalog;
+  searchCatalogByImage: searchCatalogByImage;
   createDocument: createDocumentTool;
   updateDocument: updateDocumentTool;
   requestSuggestions: requestSuggestionsTool;
