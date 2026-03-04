@@ -28,6 +28,7 @@ import { Artifact } from "./artifact";
 import { useDataStream } from "./data-stream-provider";
 import { Messages } from "./messages";
 import { MultimodalInput } from "./multimodal-input";
+import { StorefrontPanel } from "./storefront-panel";
 import { getChatHistoryPaginationKey } from "./sidebar-history";
 import { toast } from "./toast";
 import type { VisibilityType } from "./visibility-selector";
@@ -174,6 +175,17 @@ export function Chat({
     }
   }, [query, sendMessage, hasAppendedQuery, id]);
 
+  const handleQuickAsk = (prompt: string) => {
+    if (status !== "ready") {
+      return;
+    }
+
+    sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: prompt }],
+    });
+  };
+
   const { data: votes } = useSWR<Vote[]>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
     fetcher
@@ -191,44 +203,50 @@ export function Chat({
 
   return (
     <>
-      <div className="overscroll-behavior-contain flex h-dvh min-w-0 touch-pan-y flex-col bg-background">
-        <ChatHeader
-          chatId={id}
-          isReadonly={isReadonly}
-          selectedVisibilityType={initialVisibilityType}
-        />
+      <div className="flex h-dvh min-w-0 overflow-hidden bg-background">
+        <div className="hidden min-w-0 flex-1 border-r lg:flex">
+          <StorefrontPanel onQuickAsk={handleQuickAsk} />
+        </div>
 
-        <Messages
-          addToolApprovalResponse={addToolApprovalResponse}
-          chatId={id}
-          isArtifactVisible={isArtifactVisible}
-          isReadonly={isReadonly}
-          messages={messages}
-          regenerate={regenerate}
-          selectedModelId={currentModelId}
-          setMessages={setMessages}
-          status={status}
-          votes={votes}
-        />
+        <div className="overscroll-behavior-contain flex min-w-0 flex-1 touch-pan-y flex-col bg-background lg:max-w-[48%]">
+          <ChatHeader
+            chatId={id}
+            isReadonly={isReadonly}
+            selectedVisibilityType={initialVisibilityType}
+          />
 
-        <div className="sticky bottom-0 z-1 mx-auto flex w-full max-w-4xl gap-2 border-t-0 bg-background px-2 pb-3 md:px-4 md:pb-4">
-          {!isReadonly && (
-            <MultimodalInput
-              attachments={attachments}
-              chatId={id}
-              input={input}
-              messages={messages}
-              onModelChange={setCurrentModelId}
-              selectedModelId={currentModelId}
-              selectedVisibilityType={visibilityType}
-              sendMessage={sendMessage}
-              setAttachments={setAttachments}
-              setInput={setInput}
-              setMessages={setMessages}
-              status={status}
-              stop={stop}
-            />
-          )}
+          <Messages
+            addToolApprovalResponse={addToolApprovalResponse}
+            chatId={id}
+            isArtifactVisible={isArtifactVisible}
+            isReadonly={isReadonly}
+            messages={messages}
+            regenerate={regenerate}
+            selectedModelId={currentModelId}
+            setMessages={setMessages}
+            status={status}
+            votes={votes}
+          />
+
+          <div className="sticky bottom-0 z-1 mx-auto flex w-full max-w-4xl gap-2 border-t-0 bg-background px-2 pb-3 md:px-4 md:pb-4">
+            {!isReadonly && (
+              <MultimodalInput
+                attachments={attachments}
+                chatId={id}
+                input={input}
+                messages={messages}
+                onModelChange={setCurrentModelId}
+                selectedModelId={currentModelId}
+                selectedVisibilityType={visibilityType}
+                sendMessage={sendMessage}
+                setAttachments={setAttachments}
+                setInput={setInput}
+                setMessages={setMessages}
+                status={status}
+                stop={stop}
+              />
+            )}
+          </div>
         </div>
       </div>
 

@@ -36,7 +36,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export function AppSidebar({ user }: { user: User | undefined }) {
   const router = useRouter();
-  const { setOpenMobile } = useSidebar();
+  const { open, setOpen, setOpenMobile } = useSidebar();
   const { mutate } = useSWRConfig();
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
 
@@ -60,10 +60,24 @@ export function AppSidebar({ user }: { user: User | undefined }) {
 
   return (
     <>
-      <Sidebar className="group-data-[side=left]:border-r-0">
+      {open && (
+        <button
+          aria-label="Close history"
+          className="fixed inset-0 z-20 hidden bg-black/30 backdrop-blur-[1px] md:block"
+          onClick={() => setOpen(false)}
+          type="button"
+        />
+      )}
+
+      <Sidebar
+        className="z-30 border-none"
+        collapsible="offcanvas"
+        side="right"
+        variant="floating"
+      >
         <SidebarHeader>
           <SidebarMenu>
-            <div className="flex flex-row items-center justify-between">
+            <div className="flex flex-row items-center justify-between border-b px-1 pb-2">
               <Link
                 className="flex flex-row items-center gap-3"
                 href="/"
@@ -71,8 +85,8 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                   setOpenMobile(false);
                 }}
               >
-                <span className="cursor-pointer rounded-md px-2 font-semibold text-lg hover:bg-muted">
-                  Chatbot
+                <span className="cursor-pointer rounded-md px-2 font-semibold text-sm tracking-wide uppercase hover:bg-muted">
+                  Conversation History
                 </span>
               </Link>
               <div className="flex flex-row gap-1">

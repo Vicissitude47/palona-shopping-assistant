@@ -100,7 +100,7 @@ export const catalogProducts: CatalogProduct[] = [
     description: "Supportive high-rise leggings for yoga and training.",
     price: 52,
     currency: "USD",
-    imageUrl: "https://images.unsplash.com/photo-1506629905607-c4c63dcb2d1f",
+    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/d/d7/Leggings.jpg",
     tags: ["yoga", "sports", "training", "stretch", "women"],
   },
   {
