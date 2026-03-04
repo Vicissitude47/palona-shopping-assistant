@@ -32,14 +32,14 @@ export function StorefrontPanel({
             className="group flex flex-col overflow-hidden rounded-xl border bg-background shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
             key={product.id}
           >
-            <div className="aspect-[4/3] overflow-hidden bg-muted">
+            <div className="relative aspect-[4/3] shrink-0 overflow-hidden bg-muted/50 p-2">
               <img
                 alt={product.name}
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.02]"
                 src={product.imageUrl}
               />
             </div>
-            <div className="flex flex-1 flex-col gap-2 p-4">
+            <div className="flex flex-col gap-2 p-4">
               <div className="flex items-center justify-between gap-2">
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] tracking-wide uppercase">
                   {product.category}

@@ -35,6 +35,43 @@ function formatPrice(price: number, currency: string) {
   }
 }
 
+type ProductPreviewItem = {
+  id: string;
+  name: string;
+  imageUrl: string;
+  ctaUrl?: string;
+};
+
+function ToolProductImageStrip({ products }: { products: ProductPreviewItem[] }) {
+  if (products.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="px-4 pb-2">
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {products.slice(0, 5).map((product) => (
+          <a
+            className="block h-20 w-20 shrink-0 overflow-hidden rounded-md border bg-muted/20"
+            href={product.ctaUrl ?? product.imageUrl}
+            key={product.id}
+            rel="noreferrer"
+            target="_blank"
+            title={product.name}
+          >
+            {/* biome-ignore lint/performance/noImgElement: external catalog image URLs */}
+            <img
+              alt={product.name}
+              className="h-full w-full object-cover"
+              src={product.imageUrl}
+            />
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const PurePreviewMessage = ({
   addToolApprovalResponse,
   chatId,
@@ -358,8 +395,13 @@ const PurePreviewMessage = ({
               const { toolCallId, state } = part;
 
               return (
-                <Tool defaultOpen={true} key={toolCallId}>
+                <Tool defaultOpen={false} key={toolCallId}>
                   <ToolHeader state={state} type="tool-searchCatalog" />
+                  {state === "output-available" &&
+                    !("error" in part.output) &&
+                    part.output.total > 0 && (
+                      <ToolProductImageStrip products={part.output.products} />
+                    )}
                   <ToolContent>
                     {state === "input-available" && (
                       <ToolInput input={part.input} />
@@ -445,8 +487,13 @@ const PurePreviewMessage = ({
               const { toolCallId, state } = part;
 
               return (
-                <Tool defaultOpen={true} key={toolCallId}>
+                <Tool defaultOpen={false} key={toolCallId}>
                   <ToolHeader state={state} type="tool-searchCatalogByImage" />
+                  {state === "output-available" &&
+                    !("error" in part.output) &&
+                    part.output.total > 0 && (
+                      <ToolProductImageStrip products={part.output.products} />
+                    )}
                   <ToolContent>
                     {state === "input-available" && (
                       <ToolInput input={part.input} />
