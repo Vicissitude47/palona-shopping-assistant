@@ -9,7 +9,7 @@ export function StorefrontPanel({
 }: {
   onQuickAsk: (prompt: string) => void;
 }) {
-  const featuredProducts = catalogProducts.slice(0, 8);
+  const featuredProducts = catalogProducts;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
