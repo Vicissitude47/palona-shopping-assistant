@@ -1,4 +1,4 @@
-# Shopping Assistant (Palona Take-Home)
+# Shopping Assistant
 
 AI-powered shopping assistant with:
 - text-based catalog recommendations,
@@ -10,6 +10,11 @@ AI-powered shopping assistant with:
 - User-friendly storefront + chat interface.
 - Documented agent API (included in this README, no separate API doc required).
 - Code repository with setup, architecture, and deployment notes.
+
+## Demo
+
+### Product walkthrough (GIF)
+![Shopping Assistant Demo GIF](public/images/demo.gif)
 
 ## Product Scope
 
