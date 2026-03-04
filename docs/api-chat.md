@@ -1,34 +1,36 @@
-﻿# /api/chat API 文档（v1）
+# API Documentation: Chat & Image Retrieval
 
-本接口为 Palona Shopping Assistant 的核心聊天接口，负责：
+## 1. Overview
 
-- 普通对话
-- 商品推荐（通过 catalog 检索 tool）
-- 流式返回助手回答
+This project uses `POST /api/chat` as the main assistant endpoint.
 
-## Endpoint
+The endpoint supports:
+- normal assistant conversation,
+- catalog-constrained text recommendations (`searchCatalog` tool),
+- image-based similar product retrieval (`searchCatalogByImage` tool),
+- streaming responses over SSE.
 
-- `POST /api/chat`
-- `DELETE /api/chat?id=<chatId>`
+## 2. Authentication and Access Control
 
-## 认证与权限
+- Auth is required (`session.user` must exist).
+- Bot traffic is rejected (BotID check).
+- Chat records are user-scoped (`chat.userId` ownership enforcement).
 
-- 需要登录会话（`session.user`）
-- 机器人请求会被拦截（BotID）
-- chat 资源按 `chat.userId` 做隔离
+## 3. `POST /api/chat`
 
-## POST /api/chat
+## Content type
+- `application/json`
 
-### 请求体
+## Request schema (simplified)
 
 ```json
 {
-  "id": "2d3bde16-60f1-44b9-b22e-cf021984be20",
+  "id": "uuid",
   "message": {
-    "id": "9de8d8af-8c1f-423f-8dd9-26dbd06f645d",
+    "id": "uuid",
     "role": "user",
     "parts": [
-      { "type": "text", "text": "Need a breathable running t-shirt under $40" }
+      { "type": "text", "text": "Recommend breathable running tees under $40" }
     ]
   },
   "selectedChatModel": "openai/gpt-4.1-mini",
@@ -36,40 +38,58 @@
 }
 ```
 
-字段说明：
+Fields:
+- `id`: chat UUID.
+- `message`: latest user message (normal flow).
+- `messages`: full message list (tool-approval continuation flow).
+- `selectedChatModel`: requested model id (server resolves unsupported values to default).
+- `selectedVisibilityType`: `public | private`.
 
-- `id`：聊天会话 UUID
-- `message`：本次用户消息（普通对话流）
-- `messages`：tool approval flow 时可传完整消息数组（更宽松 schema）
-- `selectedChatModel`：前端选定模型 ID
-- `selectedVisibilityType`：`public | private`
+## Message part types
 
-`message.parts` 支持：
+### Text
+```json
+{ "type": "text", "text": "..." }
+```
+- `text` length: `1..2000`.
 
-- 文本：`{ "type": "text", "text": "..." }`
-- 图片文件：`{ "type": "file", "mediaType": "image/jpeg|image/png", "name": "...", "url": "https://..." }`
+### File (image)
+```json
+{
+  "type": "file",
+  "mediaType": "image/jpeg",
+  "name": "shoe.jpg",
+  "url": "https://<blob-url>"
+}
+```
+- Allowed media types: `image/jpeg`, `image/png`.
 
-### 推荐行为（业务约束）
+## Behavioral constraints
 
-1. 如果是购物/选品请求，应先调用 `searchCatalog` tool。
-2. 如果请求包含商品图片，应优先调用 `searchCatalogByImage` tool。
-3. 只能推荐 tool 返回的商品，禁止虚构 catalog 外商品。
-4. 如果无匹配，要明确告知无匹配并给相邻建议。
-5. 非购物闲聊应直接回复，不调用商品检索。
-6. 当模型是 reasoning/thinking 模型时，tools 被禁用，应提示用户切换非 reasoning 模型。
+1. For shopping text requests, model should call `searchCatalog`.
+2. For image shopping requests, model should call `searchCatalogByImage`.
+3. Returned products must come from internal catalog tables only.
+4. If no match exists, assistant should clearly say so and suggest alternatives.
+5. Non-shopping chat should be answered directly without product tools.
 
-### 成功响应
+## Response
 
-- HTTP `200`
-- `text/event-stream`（SSE）
-- 内容为 AI SDK UI message stream（含 token 增量、工具调用结果、最终消息等）
+- Status: `200`
+- Type: `text/event-stream`
+- Format: AI SDK UI message stream events.
 
-## 示例场景
+Example (conceptual):
+```text
+event: message
+data: {"type":"tool-searchCatalog","state":"output-available", ...}
 
-### 示例 1：有匹配商品
+event: message
+data: {"type":"text-delta","text":"Here are great options under $40..."}
+```
 
-请求：
+## Example A: Text recommendation
 
+Request:
 ```json
 {
   "id": "f1ad8fbe-5357-42ff-9472-cdf9f31dd8f6",
@@ -77,7 +97,7 @@
     "id": "9ab736b7-b171-40c2-88ba-64295f7f8244",
     "role": "user",
     "parts": [
-      { "type": "text", "text": "Recommend running tees under 40 dollars" }
+      { "type": "text", "text": "Recommend running t-shirts under $40" }
     ]
   },
   "selectedChatModel": "openai/gpt-4.1-mini",
@@ -85,34 +105,13 @@
 }
 ```
 
-期望：
+Expected behavior:
+- Triggers `searchCatalog`.
+- Returns catalog items only (e.g., tee products).
 
-- 先触发 `searchCatalog` tool
-- 回复中包含 catalog 商品，例如 `tee-001`, `tee-002`
+## Example B: Image recommendation
 
-### 示例 2：无匹配商品
-
-请求关键词：`4K OLED TV`
-
-期望：
-
-- `searchCatalog` 返回空结果
-- 助手明确说明未找到 catalog 内匹配项
-- 给出可选替代方向（例如运动/服饰类可用品类）
-
-### 示例 3：非购物闲聊
-
-请求关键词：`What can you help me with?`
-
-期望：
-
-- 直接回答能力范围
-- 不调用商品检索 tool
-
-### 示例 4：图片搜商品
-
-请求：
-
+Request:
 ```json
 {
   "id": "c16fd1af-2ad3-4da0-ae9f-0f748f2ce9f0",
@@ -123,8 +122,8 @@
       {
         "type": "file",
         "mediaType": "image/jpeg",
-        "name": "blob-upload.jpg",
-        "url": "https://<your-blob-url>"
+        "name": "uploaded.jpg",
+        "url": "https://<private-blob-url>"
       },
       { "type": "text", "text": "Find similar products" }
     ]
@@ -134,32 +133,110 @@
 }
 ```
 
-期望：
+Expected behavior:
+- Triggers `searchCatalogByImage`.
+- Returns top-K similar catalog items with `similarity`, `reason`, and CTA.
 
-- 触发 `searchCatalogByImage`
-- 返回 catalog 内 topK 相似商品（含 similarity 分数）
+## 4. `DELETE /api/chat?id=<chatId>`
 
-## DELETE /api/chat
+Deletes a chat owned by current user.
 
-删除当前用户拥有的 chat。
-
-请求：
-
+Request:
 ```http
-DELETE /api/chat?id=<chatId>
+DELETE /api/chat?id=2d3bde16-60f1-44b9-b22e-cf021984be20
 ```
 
-响应：
+Success:
+- `200 OK` with deleted chat payload.
 
-- `200`：返回被删除的 chat 记录
-- `400`：缺失 `id`
-- `401`：未登录
-- `403`：chat 不属于当前用户
+Common failures:
+- `400` missing `id`
+- `401` unauthenticated
+- `403` chat not owned by requester
 
-## 错误码
+## 5. Related Image Endpoints
 
-`ChatbotError` 使用统一结构：
+## `POST /api/files/upload`
 
+Uploads image to Vercel Blob (private access).
+
+Constraints:
+- auth required,
+- max size: 5 MB,
+- MIME: JPEG/PNG only.
+
+Success sample:
+```json
+{
+  "url": "https://<private-blob-url>",
+  "pathname": "image-abc.jpeg",
+  "contentType": "image/jpeg"
+}
+```
+
+Failure sample:
+```json
+{ "error": "File size should be less than 5MB" }
+```
+
+## `GET /api/files/blob?url=<blob-url>`
+
+Server-side proxy for blob reads.
+
+Validation:
+- `url` required,
+- URL must be Vercel Blob hostname (`*.blob.vercel-storage.com`).
+
+Success:
+- `200` image stream with correct `content-type`.
+
+Failure:
+- `400` missing/invalid URL or unsupported host,
+- `404` blob not found.
+
+## 6. Tool Output Shapes
+
+## `searchCatalog` output (simplified)
+```json
+{
+  "query": "running t-shirt",
+  "total": 3,
+  "products": [
+    {
+      "id": "tee-001",
+      "name": "SwiftDry Performance T-Shirt",
+      "category": "t-shirt",
+      "price": 29,
+      "currency": "USD",
+      "imageUrl": "https://...",
+      "reason": "Matches: running | Budget range any - $40",
+      "ctaLabel": "View Product",
+      "ctaUrl": "https://..."
+    }
+  ]
+}
+```
+
+## `searchCatalogByImage` output (simplified)
+```json
+{
+  "imageUrl": "https://...",
+  "embeddingModel": "openai/text-embedding-3-small",
+  "total": 3,
+  "products": [
+    {
+      "id": "shoe-001",
+      "name": "AeroRun Road Shoes",
+      "similarity": 0.83,
+      "reason": "Strong visual match"
+    }
+  ]
+}
+```
+
+## 7. Error Codes
+
+Errors use:
 ```json
 {
   "code": "rate_limit:chat",
@@ -168,19 +245,23 @@ DELETE /api/chat?id=<chatId>
 }
 ```
 
-常见错误：
+Common codes:
+- `bad_request:api` (`400`): invalid request schema/parameters.
+- `unauthorized:chat` (`401`): missing auth session.
+- `forbidden:chat` (`403`): accessing another user's chat.
+- `rate_limit:chat` (`429`): daily user/IP quota exceeded.
+- `bad_request:activate_gateway` (`400`): AI Gateway requires billing setup.
+- `offline:chat` (`503`): upstream/service failure.
 
-- `bad_request:api`（400）：请求体不合法或参数缺失
-- `unauthorized:chat`（401）：未登录
-- `forbidden:chat`（403）：越权访问他人 chat
-- `rate_limit:chat`（429）：达到每日消息上限
-- `bad_request:activate_gateway`（400）：AI Gateway 账号未激活信用卡
-- `offline:chat`（503）：服务端处理失败/上游不可用
+## 8. Observability Notes
 
-## 关联实现
+- Request timing/failure snapshots are recorded in chat API metrics.
+- Image search pipeline emits structured debug logs when `IMAGE_SEARCH_DEBUG=1`.
 
-- 接口实现：`app/(chat)/api/chat/route.ts`
-- 请求 schema：`app/(chat)/api/chat/schema.ts`
-- 业务提示词：`lib/ai/prompts.ts`
-- catalog 检索 tool：`lib/ai/tools/search-catalog.ts`
-- catalog 查询：`lib/db/queries.ts`
+## 9. Source References
+
+- Chat route: `app/(chat)/api/chat/route.ts`
+- Chat schema: `app/(chat)/api/chat/schema.ts`
+- Upload route: `app/(chat)/api/files/upload/route.ts`
+- Blob proxy route: `app/(chat)/api/files/blob/route.ts`
+- Errors: `lib/errors.ts`
